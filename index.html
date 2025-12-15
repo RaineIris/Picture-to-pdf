@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片转PDF工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+    <style>
+        /* 全局美化 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #F8F8F8;
+            color: #333333;
+        }
+
+        button, .upload-button, select, input, a {
+            outline: none !important;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        button:focus, .upload-button:focus, select:focus {
+            outline: none !important;
+            box-shadow: none !important;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px 20px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            min-height: 100vh;
+        }
+
+        h1 {
+            color: #1A1A1A;
+            text-align: center;
+            margin-bottom: 25px;
+            font-weight: 500;
+        }
+
+        .button-wrapper {
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            gap: 15px; 
+            flex-wrap: wrap;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .upload-button {
+            display: inline-block;
+            padding: 12px 25px;
+            background-color: #2D2D2D;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border: none;
+            font-size: 16px;
+        }
+        .upload-button:hover { background-color: #444444; }
+        .upload-button.disabled { background-color: #999; cursor: not-allowed; }
+
+        /* 清空按钮样式 */
+        .clear-all-button {
+            display: none; 
+            padding: 12px 25px;
+            background-color: #D32F2F; 
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border: none;
+            font-size: 16px;
+        }
+        .clear-all-button:hover { background-color: #B71C1C; }
+
+        #image-preview-container-wrapper {
+            max-width: 320px; 
+            margin: 0 auto 20px;
+            padding: 0;
+        }
+
+        #image-preview-container {
+            display: block;
+            min-height: 50px;
+            padding: 10px;
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            background-color: #FAFAFA;
+        }
+
+        .image-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #EEEEEE;
+            cursor: grab; 
+            user-select: none;
+        }
+        
+        .image-item:last-child {
+            border-bottom: none;
+        }
+        
+        .sortable-ghost {
+            opacity: 0.4;
+            background-color: #E6E6E6;
+        }
+
+        .item-number {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #666666;
+            min-width: 40px;
+            text-align: right;
+            padding-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .image-content {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .image-content img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border: 1px solid #CCCCCC;
+            border-radius: 6px;
+            margin-right: 15px;
+            flex-shrink: 0;
+            cursor: zoom-in;
+        }
+
+        .image-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+            margin-left: 15px;
+        }
+
+        .action-button {
+            padding: 7px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        .remove-button { background-color: #CCCCCC; color: #333; }
+        .remove-button:hover { background-color: #B0B0B0; }
+
+        .copy-button { background-color: #E0E0E0; color: #333; }
+        .copy-button:hover { background-color: #D0D0D0; }
+        
+        /* 底部操作按钮区域 */
+        .bottom-actions {
+            margin-top: 30px;
+        }
+
+        .generate-button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background-color: #1A1A1A;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .generate-button:hover { background-color: #333333; }
+        .generate-button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* 预览按钮样式 */
+        .preview-button {
+            display: none; /* 默认隐藏 */
+            width: 100%;
+            padding: 15px;
+            background-color: #1976D2; /* 蓝色 */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            margin-bottom: 15px; /* 与生成按钮的间距 */
+        }
+        .preview-button:hover { background-color: #1565C0; }
+
+
+        /* 模态对话框样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 350px;
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            width: 45%;
+            font-weight: 500;
+        }
+
+        .action-primary { background-color: #1A1A1A; color: white; }
+        .action-secondary { background-color: #E0E0E0; color: #333; }
+        .action-primary:hover { background-color: #333333; }
+        .action-secondary:hover { background-color: #CCCCCC; }
+        .action-danger { background-color: #D32F2F; color: white; }
+        .action-danger:hover { background-color: #B71C1C; }
+
+        .position-selector {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 25px;
+            font-size: 1.1em;
+        }
+
+        .position-selector select {
+            padding: 8px;
+            margin: 0 10px;
+            border-radius: 6px;
+            border: 1px solid #CCCCCC;
+            min-width: 60px;
+            background-color: white;
+        }
+
+        .next-position-box {
+            font-weight: bold;
+            color: #1A1A1A;
+            padding: 2px 8px;
+            border: 1px solid #1A1A1A;
+            border-radius: 4px;
+            margin-left: 5px;
+            background-color: #F0F0F0;
+        }
+
+        #image-viewer {
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 3000;
+            cursor: zoom-out;
+        }
+        #image-viewer-img {
+            max-width: 95%;
+            max-height: 95%;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        
+        #pdf-name-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #CCCCCC;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        
+        #status-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 4000;
+            display: none;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>图片转PDF工具</h1>
+
+        <div class="button-wrapper">
+            <label for="file-input" class="upload-button" id="upload-label">选择图片</label>
+            <button id="clear-all-button" class="clear-all-button">清空所有</button>
+        </div>
+        <input type="file" id="file-input" multiple>
+
+        <h3>图片列表（长按拖拽可排序）</h3>
+        
+        <div id="image-preview-container-wrapper">
+            <div id="image-preview-container">
+                <p id="placeholder-text">正在检查历史记录...</p>
+            </div>
+        </div>
+
+        <div class="bottom-actions">
+            <button id="preview-pdf-button" class="preview-button">预览 PDF</button>
+            <button id="generate-pdf-button" class="generate-button" disabled>生成 PDF</button>
+        </div>
+
+    </div>
+
+    <div id="copy-dialog" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="copy-dialog-title">复制第 X 张图片</h3>
+            <p style="text-align: center; margin-bottom: 10px;">将复制的图片插入到：</p>
+            <div class="position-selector">
+                <select id="position-select"></select>
+                <span>和 图片</span>
+                <span id="next-position-display" class="next-position-box"></span>
+                <span>之间</span>
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-copy" class="action-secondary">取消</button>
+                <button id="confirm-copy" class="action-primary">确定</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="delete-dialog" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="delete-dialog-message">确定要删除这张图片吗？</h3>
+            <div class="modal-actions">
+                <button id="cancel-delete" class="action-secondary">取消</button>
+                <button id="confirm-delete" class="action-primary">确定删除</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="name-dialog" class="modal-overlay">
+        <div class="modal-content">
+            <h3>请为您的 PDF 文件命名</h3>
+            <input type="text" id="pdf-name-input" value="我的图片合集">
+            <div class="modal-actions">
+                <button id="cancel-name" class="action-secondary">取消</button>
+                <button id="confirm-name" class="action-primary">生成</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="alert-dialog" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="alert-message">提示信息</h3>
+            <div class="modal-actions" style="justify-content: center;">
+                <button id="alert-ok" class="action-primary" style="width: 60%;">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="image-viewer" class="modal-overlay">
+        <img id="image-viewer-img" src="" alt="Full Screen Image">
+    </div>
+    
+    <div id="status-bar">正在保存...</div>
+
+    <script>
+        localforage.config({
+            name: 'PDFConverterApp',
+            storeName: 'images_db' 
+        });
+
+        const fileInput = document.getElementById('file-input');
+        const previewContainer = document.getElementById('image-preview-container');
+        const generateButton = document.getElementById('generate-pdf-button');
+        const previewButton = document.getElementById('preview-pdf-button');
+        const placeholderText = document.getElementById('placeholder-text');
+        const uploadLabel = document.getElementById('upload-label');
+        const clearAllButton = document.getElementById('clear-all-button');
+        const statusBar = document.getElementById('status-bar');
+        
+        // Modal Elements
+        const copyDialog = document.getElementById('copy-dialog');
+        const dialogTitle = document.getElementById('copy-dialog-title');
+        const positionSelect = document.getElementById('position-select');
+        const nextPositionDisplay = document.getElementById('next-position-display');
+        const confirmCopyBtn = document.getElementById('confirm-copy');
+        const cancelCopyBtn = document.getElementById('cancel-copy');
+        
+        const deleteDialog = document.getElementById('delete-dialog');
+        const deleteDialogMessage = document.getElementById('delete-dialog-message');
+        const confirmDeleteBtn = document.getElementById('confirm-delete');
+        const cancelDeleteBtn = document.getElementById('cancel-delete');
+        
+        const nameDialog = document.getElementById('name-dialog');
+        const pdfNameInput = document.getElementById('pdf-name-input');
+        const confirmNameBtn = document.getElementById('confirm-name');
+        const cancelNameBtn = document.getElementById('cancel-name');
+
+        const alertDialog = document.getElementById('alert-dialog');
+        const alertMessage = document.getElementById('alert-message');
+        const alertOkBtn = document.getElementById('alert-ok');
+
+        const imageViewer = document.getElementById('image-viewer');
+        const imageViewerImg = document.getElementById('image-viewer-img');
+
+        let imageData = [];
+        let imageIndexToCopy = -1; 
+        let resolveNamePromise; 
+        let isSaving = false;
+        let currentDeleteAction = null; 
+
+        function showStatus(msg, duration = 2000) {
+            statusBar.textContent = msg;
+            statusBar.style.display = 'block';
+            if (duration > 0) {
+                setTimeout(() => {
+                    statusBar.style.display = 'none';
+                }, duration);
+            }
+        }
+
+        function showCustomAlert(message) {
+            alertMessage.textContent = message;
+            alertDialog.classList.add('visible');
+            return new Promise(resolve => {
+                alertOkBtn.onclick = () => {
+                    alertDialog.classList.remove('visible');
+                    resolve();
+                };
+            });
+        }
+        
+        function showConfirmDialog(message, confirmCallback, isDanger = false) {
+            deleteDialogMessage.textContent = message;
+            currentDeleteAction = confirmCallback;
+            if (isDanger) {
+                confirmDeleteBtn.classList.remove('action-primary');
+                confirmDeleteBtn.classList.add('action-danger');
+                confirmDeleteBtn.textContent = "确认清空";
+            } else {
+                confirmDeleteBtn.classList.remove('action-danger');
+                confirmDeleteBtn.classList.add('action-primary');
+                confirmDeleteBtn.textContent = "确定删除";
+            }
+            deleteDialog.classList.add('visible');
+        }
+
+        function showNamePrompt() {
+            pdfNameInput.value = "我的图片合集";
+            nameDialog.classList.add('visible');
+            return new Promise(resolve => {
+                resolveNamePromise = resolve;
+            });
+        }
+
+        // --- 数据加载 ---
+        async function loadImagesFromStorage() {
+            try {
+                placeholderText.textContent = "正在恢复上次的编辑...";
+                const loadedData = await localforage.getItem('pdfConverterImages');
+                if (Array.isArray(loadedData) && loadedData.length > 0) {
+                    imageData = loadedData;
+                    renderImages();
+                    showStatus("已恢复历史记录");
+                } else {
+                    imageData = [];
+                    renderImages();
+                }
+            } catch (e) {
+                console.error("加载数据失败", e);
+                imageData = [];
+                renderImages();
+                showStatus("无法读取历史数据", 3000);
+            }
+        }
+
+        async function saveImagesToStorage() {
+            if (isSaving) return;
+            isSaving = true;
+            try {
+                if (imageData.length > 0) {
+                    await localforage.setItem('pdfConverterImages', imageData);
+                } else {
+                    await localforage.removeItem('pdfConverterImages');
+                }
+            } catch (e) {
+                console.error("保存失败", e);
+                showStatus("存储空间不足，刷新可能丢失数据！", 5000);
+            } finally {
+                isSaving = false;
+                updatePlaceholderAndButton();
+            }
+        }
+
+        // --- 核心交互逻辑 ---
+        clearAllButton.onclick = () => {
+            showConfirmDialog(
+                "确定要清空所有图片吗？此操作无法撤销。",
+                async () => {
+                    imageData = [];
+                    renderImages();
+                    await localforage.clear();
+                    showStatus("列表已清空");
+                },
+                true
+            );
+        };
+
+        fileInput.addEventListener('change', async (event) => {
+            const files = event.target.files;
+            if (files.length === 0) return;
+
+            uploadLabel.classList.add('disabled');
+            uploadLabel.textContent = "读取中...";
+            showStatus("正在处理图片...", 0);
+
+            const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+            fileInput.value = '';
+
+            const readPromises = imageFiles.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(file);
+                });
+            });
+
+            const newImagesData = await Promise.all(readPromises);
+            const successfulImages = newImagesData.filter(data => data !== null);
+            
+            imageData = imageData.concat(successfulImages);
+            renderImages();
+            await saveImagesToStorage();
+            
+            uploadLabel.classList.remove('disabled');
+            uploadLabel.textContent = "选择图片";
+            showStatus("图片添加成功");
+        });
+
+        function renderImages() {
+            previewContainer.innerHTML = ''; 
+            if (imageData.length === 0) {
+                placeholderText.textContent = "请点击上方按钮选择图片。";
+                previewContainer.appendChild(placeholderText);
+                updatePlaceholderAndButton();
+                return;
+            }
+
+            imageData.forEach((base64Data, index) => {
+                const item = document.createElement('div');
+                item.className = 'image-item';
+
+                const numberSpan = document.createElement('span');
+                numberSpan.className = 'item-number'; 
+                numberSpan.textContent = index + 1;
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'image-content';
+
+                const img = document.createElement('img');
+                img.src = base64Data;
+                img.alt = `图片 ${index + 1}`;
+                img.onclick = () => showImageViewer(base64Data);
+                contentDiv.appendChild(img);
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'image-actions';
+
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'action-button copy-button';
+                copyBtn.innerHTML = '复制';
+                copyBtn.onclick = () => showCopyDialog(index); 
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'action-button remove-button';
+                removeBtn.innerHTML = '删除';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    showConfirmDialog(
+                        `确定要删除第 ${index + 1} 张图片吗？`, 
+                        async () => {
+                            imageData.splice(index, 1);
+                            renderImages(); 
+                            await saveImagesToStorage();
+                            showStatus(`图片 ${index + 1} 已删除`);
+                        },
+                        false
+                    );
+                };
+                
+                actionsDiv.appendChild(copyBtn);
+                actionsDiv.appendChild(removeBtn);
+                item.appendChild(numberSpan);
+                item.appendChild(contentDiv);
+                item.appendChild(actionsDiv);
+                previewContainer.appendChild(item);
+            });
+            
+            initSortable(); 
+            updatePlaceholderAndButton();
+        }
+
+        function showImageViewer(base64Data) {
+            imageViewerImg.src = base64Data;
+            imageViewer.classList.add('visible');
+        }
+        imageViewer.onclick = () => {
+            imageViewer.classList.remove('visible');
+            imageViewerImg.src = '';
+        };
+
+        // --- Dialog Logic ---
+        confirmDeleteBtn.onclick = () => {
+            if (currentDeleteAction) currentDeleteAction();
+            deleteDialog.classList.remove('visible');
+            currentDeleteAction = null;
+        };
+
+        cancelDeleteBtn.onclick = () => {
+            deleteDialog.classList.remove('visible');
+            currentDeleteAction = null;
+        };
+
+        function showCopyDialog(originalIndex) {
+            imageIndexToCopy = originalIndex;
+            const totalCount = imageData.length;
+            dialogTitle.textContent = `复制第 ${originalIndex + 1} 张图片`;
+            positionSelect.innerHTML = '';
+            
+            for (let i = 1; i <= totalCount + 1; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                if (i === 1) option.textContent = '开始';
+                else if (i === totalCount + 1) option.textContent = totalCount.toString();
+                else option.textContent = i - 1;
+                
+                if (i === originalIndex + 1) option.selected = true;
+                positionSelect.appendChild(option);
+            }
+            updateNextPositionDisplay(); 
+            positionSelect.onchange = updateNextPositionDisplay;
+            copyDialog.classList.add('visible');
+        }
+
+        function updateNextPositionDisplay() {
+            const selectedPosition = parseInt(positionSelect.value);
+            const totalCount = imageData.length;
+            if (selectedPosition === totalCount + 1) nextPositionDisplay.textContent = '结束';
+            else if (selectedPosition === 1) nextPositionDisplay.textContent = '1';
+            else nextPositionDisplay.textContent = selectedPosition;
+        }
+        
+        confirmCopyBtn.onclick = async () => {
+            const originalIndex = imageIndexToCopy;
+            const selectedPosition = parseInt(positionSelect.value); 
+            const targetIndex = selectedPosition - 1; 
+
+            const dataToCopy = imageData[originalIndex];
+            imageData.splice(targetIndex, 0, dataToCopy);
+
+            copyDialog.classList.remove('visible');
+            renderImages();
+            await saveImagesToStorage();
+            showStatus(`已复制到位置 ${selectedPosition}`);
+            imageIndexToCopy = -1; 
+        };
+
+        cancelCopyBtn.onclick = () => {
+            copyDialog.classList.remove('visible');
+            imageIndexToCopy = -1;
+        };
+
+        function updatePlaceholderAndButton() {
+             if (imageData.length === 0) {
+                if (placeholderText.textContent !== "正在检查历史记录..." && placeholderText.textContent !== "正在恢复上次的编辑...") {
+                     placeholderText.style.display = 'block';
+                }
+                generateButton.disabled = true;
+                clearAllButton.style.display = 'none';
+                previewButton.style.display = 'none';
+            } else {
+                placeholderText.style.display = 'none';
+                generateButton.disabled = false;
+                clearAllButton.style.display = 'inline-block';
+                previewButton.style.display = 'block';
+            }
+        }
+
+        function initSortable() {
+            if (previewContainer.sortable) {
+                previewContainer.sortable.destroy();
+            }
+            previewContainer.sortable = Sortable.create(previewContainer, {
+                animation: 150, 
+                ghostClass: 'sortable-ghost',
+                handle: ".image-item", 
+                filter: ".action-button", 
+                onFilter: function (evt) {
+                    if (evt.item.contains(evt.originalEvent.target)) {
+                        evt.originalEvent.target.click(); 
+                    }
+                },
+                onEnd: async function (evt) {
+                    const oldIndex = evt.oldIndex;
+                    const newIndex = evt.newIndex;
+                    if (oldIndex !== newIndex) {
+                        const [movedItem] = imageData.splice(oldIndex, 1);
+                        imageData.splice(newIndex, 0, movedItem);
+                        renderImages();
+                        await saveImagesToStorage();
+                    }
+                }
+            });
+        }
+        
+        // --- 核心修复：更智能的 PDF 生成逻辑 ---
+        async function createPDFDoc() {
+            const { jsPDF } = window.jspdf;
+            
+            // 初始化，暂时不添加页面，避免 orientation 干扰
+            const doc = new jsPDF({
+                orientation: 'p', // 默认竖屏
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            for (let i = 0; i < imageData.length; i++) {
+                const imgData = imageData[i];
+                const img = new Image();
+                img.src = imgData;
+
+                await new Promise(resolve => {
+                    img.onload = resolve;
+                    img.onerror = () => {
+                        console.error(`图片加载失败: 索引 ${i}`);
+                        resolve();
+                    };
+                });
+                
+                // 固定宽度为 A4 宽度 (210mm)
+                const pdfWidth = 210;
+                
+                // 计算图片的宽高比
+                let imgWidth = img.naturalWidth;
+                let imgHeight = img.naturalHeight;
+                
+                if (!imgWidth || !imgHeight) {
+                     imgWidth = 100; imgHeight = 100; 
+                }
+                
+                const ratio = imgHeight / imgWidth;
+                const pdfHeight = pdfWidth * ratio;
+
+                // 【核心修复点】
+                // 显式判断页面的“方向”
+                // 如果图片宽度 > 高度（横图），我们告诉 PDF 这是一个 "landscape"（横向）页面
+                // 但同时传入的尺寸依然是 [210, 50]。
+                // 这样 jsPDF 就不会自作聪明地把 210 当成高度了。
+                const isWide = pdfWidth > pdfHeight;
+                const orientation = isWide ? 'l' : 'p';
+
+                doc.addPage([pdfWidth, pdfHeight], orientation);
+                doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            }
+            
+            // 循环结束后，删除 PDF 初始化时自动生成的那个空白第一页
+            const totalPages = doc.getNumberOfPages();
+            if (totalPages > 1) {
+                doc.deletePage(1); 
+            }
+            
+            return doc;
+        }
+
+        // --- 预览功能 ---
+        previewButton.addEventListener('click', async () => {
+            if (imageData.length === 0) return;
+            showStatus("正在生成预览...", 0);
+            
+            setTimeout(async () => {
+                try {
+                    const doc = await createPDFDoc();
+                    // 在新窗口打开 Blob URL
+                    window.open(doc.output('bloburl'), '_blank');
+                    showStatus("预览已打开");
+                } catch (err) {
+                    console.error(err);
+                    showStatus("预览失败，请重试");
+                    await showCustomAlert("生成预览时出错。");
+                }
+            }, 100);
+        });
+
+        // --- 生成功能 ---
+        generateButton.addEventListener('click', async () => {
+            if (imageData.length === 0) {
+                await showCustomAlert('请先上传图片！');
+                return;
+            }
+
+            const pdfName = await new Promise(resolve => {
+                showNamePrompt();
+                resolveNamePromise = resolve;
+            });
+
+            if (!pdfName) return; 
+            
+            showStatus("正在生成 PDF，请不要关闭页面...", 0);
+
+            setTimeout(async () => {
+                try {
+                    const doc = await createPDFDoc();
+                    doc.save(`${pdfName}.pdf`);
+                    statusBar.style.display = 'none';
+                    await showCustomAlert(`PDF 文件 "${pdfName}.pdf" 已生成并下载！`);
+                } catch (err) {
+                    console.error(err);
+                    showStatus("生成失败，请重试");
+                    await showCustomAlert("生成 PDF 时出错，请检查图片是否正常。");
+                }
+            }, 100);
+        });
+
+        confirmNameBtn.onclick = () => {
+            const name = pdfNameInput.value.trim() || "未命名文件";
+            nameDialog.classList.remove('visible');
+            if (resolveNamePromise) resolveNamePromise(name);
+        };
+
+        cancelNameBtn.onclick = () => {
+            nameDialog.classList.remove('visible');
+            if (resolveNamePromise) resolveNamePromise(null);
+        };
+
+        window.onload = loadImagesFromStorage;
+
+    </script>
+</body>
+</html>
