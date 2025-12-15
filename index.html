@@ -2,19 +2,49 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>图片转PDF工具</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
     <style>
-        /* 全局美化 */
+        /* 全局基础样式 */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #F8F8F8;
             color: #333333;
+            padding-bottom: 80px; /* 为底部悬浮栏留出空间 */
+        }
+
+        /* 响应式容器 */
+        .container {
+            max-width: 800px; 
+            margin: 20px auto; /* 核心：上下20px，左右自动 */
+            width: auto;
+            /* 核心：两侧保留 20px 的安全滚动区域 (响应您的要求) */
+            margin-left: 20px;
+            margin-right: 20px;
+            
+            background: white;
+            padding: 30px 20px;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            min-height: calc(100vh - 40px);
+        }
+        
+        /* 大屏适配 */
+        @media (min-width: 840px) {
+            .container {
+                margin-left: auto;
+                margin-right: auto;
+            }
         }
 
         button, .upload-button, select, input, a {
@@ -27,22 +57,34 @@
             box-shadow: none !important;
         }
 
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px 20px;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-            min-height: 100vh;
-        }
-
         h1 {
             color: #1A1A1A;
             text-align: center;
             margin-bottom: 25px;
             font-weight: 500;
         }
+
+        .top-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 0 5px;
+        }
+
+        .history-btn {
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #666;
+            border-radius: 0;
+            padding: 0 0 2px 0;
+            cursor: pointer;
+            font-size: 14px;
+            color: #555;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .history-btn:hover { color: #000; border-bottom-color: #000; }
 
         .button-wrapper {
             text-align: center;
@@ -52,9 +94,7 @@
             flex-wrap: wrap;
         }
 
-        #file-input {
-            display: none;
-        }
+        #file-input { display: none; }
 
         .upload-button {
             display: inline-block;
@@ -72,7 +112,6 @@
         .upload-button:hover { background-color: #444444; }
         .upload-button.disabled { background-color: #999; cursor: not-allowed; }
 
-        /* 清空按钮样式 */
         .clear-all-button {
             display: none; 
             padding: 12px 25px;
@@ -88,8 +127,31 @@
         }
         .clear-all-button:hover { background-color: #B71C1C; }
 
+        .list-header-area {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .list-header-area h3 { margin: 0; font-size: 1.1em; }
+        
+        .edit-toggle-btn {
+            display: none; 
+            background: transparent;
+            color: #1976D2;
+            border: 1px solid #1976D2;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .edit-toggle-btn.active {
+            background: #1976D2;
+            color: white;
+        }
+
         #image-preview-container-wrapper {
-            max-width: 320px; 
+            width: 100%; 
             margin: 0 auto 20px;
             padding: 0;
         }
@@ -108,26 +170,45 @@
             align-items: center;
             padding: 10px 0;
             border-bottom: 1px solid #EEEEEE;
-            cursor: grab; 
+            /* 移除 grab 光标，因为现在只能拖手柄 */
+            /* cursor: grab; */ 
             user-select: none;
+            position: relative;
         }
         
-        .image-item:last-child {
-            border-bottom: none;
-        }
+        .image-item:last-child { border-bottom: none; }
         
-        .sortable-ghost {
-            opacity: 0.4;
-            background-color: #E6E6E6;
+        .container.edit-mode .image-item { cursor: pointer; }
+        .container.edit-mode .image-actions { display: none; }
+        
+        /* 拖拽时的样式 */
+        .sortable-ghost { opacity: 0.4; background: #f0f0f0; }
+        .sortable-drag { opacity: 1; background: white; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+
+        .image-item.selected { background-color: #E3F2FD; }
+        
+        .select-indicator {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ccc;
+            border-radius: 50%;
+            margin-right: 10px;
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: center;
         }
+        .container.edit-mode .select-indicator { display: flex; }
+        .image-item.selected .select-indicator { background-color: #1976D2; border-color: #1976D2; }
+        .image-item.selected .select-indicator::after { content: '✓'; color: white; font-size: 14px; font-weight: bold; }
 
         .item-number {
             font-size: 1.2em;
             font-weight: bold;
             color: #666666;
-            min-width: 40px;
+            min-width: 30px;
             text-align: right;
-            padding-right: 15px;
+            padding-right: 10px;
             flex-shrink: 0;
         }
 
@@ -135,6 +216,7 @@
             flex-grow: 1;
             display: flex;
             align-items: center;
+            overflow: hidden; /* 防止内容撑开 */
         }
 
         .image-content img {
@@ -147,13 +229,33 @@
             flex-shrink: 0;
             cursor: zoom-in;
         }
+        .container.edit-mode .image-content img { cursor: pointer; }
 
         .image-actions {
             display: flex;
             gap: 8px;
             flex-shrink: 0;
-            margin-left: 15px;
+            margin-left: 10px;
+            margin-right: 5px; /* 右边留点距离给手柄 */
         }
+
+        /* 拖拽手柄样式 */
+        .drag-handle {
+            padding: 10px;
+            cursor: grab;
+            color: #999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-left: auto; /* 自动推到最右侧 */
+            -webkit-touch-callout: none;
+        }
+        .drag-handle:active { cursor: grabbing; color: #666; }
+        .drag-handle svg { width: 20px; height: 20px; fill: currentColor; }
+        
+        /* 编辑模式下隐藏手柄 */
+        .container.edit-mode .drag-handle { display: none; }
 
         .action-button {
             padding: 7px 12px;
@@ -163,17 +265,10 @@
             font-size: 14px;
             transition: background-color 0.2s;
         }
-
         .remove-button { background-color: #CCCCCC; color: #333; }
-        .remove-button:hover { background-color: #B0B0B0; }
-
         .copy-button { background-color: #E0E0E0; color: #333; }
-        .copy-button:hover { background-color: #D0D0D0; }
         
-        /* 底部操作按钮区域 */
-        .bottom-actions {
-            margin-top: 30px;
-        }
+        .bottom-actions { margin-top: 30px; }
 
         .generate-button {
             display: block;
@@ -191,12 +286,11 @@
         .generate-button:hover { background-color: #333333; }
         .generate-button:disabled { background-color: #ccc; cursor: not-allowed; }
 
-        /* 预览按钮样式 */
         .preview-button {
-            display: none; /* 默认隐藏 */
+            display: none; 
             width: 100%;
             padding: 15px;
-            background-color: #1976D2; /* 蓝色 */
+            background-color: #1976D2; 
             color: white;
             border: none;
             border-radius: 8px;
@@ -204,12 +298,43 @@
             font-size: 16px;
             font-weight: 500;
             transition: background-color 0.2s;
-            margin-bottom: 15px; /* 与生成按钮的间距 */
+            margin-bottom: 15px; 
         }
-        .preview-button:hover { background-color: #1565C0; }
 
+        /* 底部悬浮编辑栏 - 纯文字版 */
+        .bulk-toolbar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-around;
+            padding: 15px 0;
+            z-index: 1000;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+        .bulk-toolbar.visible { transform: translateY(0); }
+        .bulk-btn {
+            background: transparent;
+            border: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+            width: 25%;
+            cursor: pointer;
+            padding: 10px 0;
+        }
+        .bulk-btn:active { background-color: #f5f5f5; }
+        .bulk-delete { color: #D32F2F; font-weight: bold; }
 
-        /* 模态对话框样式 */
+        /* 模态框通用 */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -225,128 +350,66 @@
             visibility: hidden;
             transition: opacity 0.3s ease;
         }
-
-        .modal-overlay.visible {
-            opacity: 1;
-            visibility: visible;
-        }
-
+        .modal-overlay.visible { opacity: 1; visibility: visible; }
         .modal-content {
             background: white;
             padding: 25px;
             border-radius: 10px;
             width: 90%;
             max-width: 350px;
+            max-height: 80vh; 
+            overflow-y: auto; 
             box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
         }
-
-        .modal-content h3 {
-            margin-top: 0;
-            margin-bottom: 20px;
-            text-align: center;
-            font-weight: 500;
-            line-height: 1.4;
-        }
-
-        .modal-actions {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 20px;
-        }
-
-        .modal-actions button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 15px;
-            width: 45%;
-            font-weight: 500;
-        }
-
+        .modal-content h3 { margin-top: 0; margin-bottom: 20px; text-align: center; font-weight: 500; }
+        .modal-actions { display: flex; justify-content: space-around; margin-top: 20px; }
+        .modal-actions button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; width: 45%; font-weight: 500; }
+        
         .action-primary { background-color: #1A1A1A; color: white; }
         .action-secondary { background-color: #E0E0E0; color: #333; }
-        .action-primary:hover { background-color: #333333; }
-        .action-secondary:hover { background-color: #CCCCCC; }
         .action-danger { background-color: #D32F2F; color: white; }
-        .action-danger:hover { background-color: #B71C1C; }
 
-        .position-selector {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 25px;
-            font-size: 1.1em;
-        }
+        /* 历史记录 */
+        .history-list { list-style: none; padding: 0; margin: 0; }
+        .history-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
+        .history-info { flex-grow: 1; padding-right: 10px; overflow: hidden; }
+        .history-name { font-weight: bold; font-size: 15px; display: block; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .history-time { color: #888; font-size: 12px; }
+        .history-actions { display: flex; gap: 5px; flex-shrink: 0; }
+        .history-btn-small { padding: 6px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; border: none; white-space: nowrap; }
+        .restore-btn { background-color: #1976D2; color: white; }
+        .rename-btn { background-color: #FF9800; color: white; }
+        .delete-btn { background-color: #e0e0e0; color: #333; }
 
-        .position-selector select {
-            padding: 8px;
-            margin: 0 10px;
-            border-radius: 6px;
-            border: 1px solid #CCCCCC;
-            min-width: 60px;
-            background-color: white;
-        }
+        .position-selector { display: flex; align-items: center; justify-content: center; margin-bottom: 25px; font-size: 1.1em; }
+        .position-selector select { padding: 8px; margin: 0 10px; border-radius: 6px; border: 1px solid #CCCCCC; min-width: 60px; background-color: white; }
+        .next-position-box { font-weight: bold; color: #1A1A1A; padding: 2px 8px; border: 1px solid #1A1A1A; border-radius: 4px; margin-left: 5px; background-color: #F0F0F0; }
 
-        .next-position-box {
-            font-weight: bold;
-            color: #1A1A1A;
-            padding: 2px 8px;
-            border: 1px solid #1A1A1A;
-            border-radius: 4px;
-            margin-left: 5px;
-            background-color: #F0F0F0;
-        }
-
-        #image-viewer {
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 3000;
-            cursor: zoom-out;
-        }
-        #image-viewer-img {
-            max-width: 95%;
-            max-height: 95%;
-            border-radius: 8px;
-            pointer-events: none;
-        }
-        
-        #pdf-name-input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #CCCCCC;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 16px;
-        }
-        
-        #status-bar {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(0,0,0,0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 14px;
-            z-index: 4000;
-            display: none;
-            white-space: nowrap;
-        }
+        #image-viewer { background: rgba(0, 0, 0, 0.9); z-index: 3000; cursor: zoom-out; }
+        #image-viewer-img { max-width: 95%; max-height: 95%; border-radius: 8px; pointer-events: none; }
+        #pdf-name-input { width: 100%; padding: 10px; border: 1px solid #CCCCCC; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        #status-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px; font-size: 14px; z-index: 4000; display: none; white-space: nowrap; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>图片转PDF工具</h1>
+    <div id="main-container" class="container">
+        <div class="top-controls">
+            <div style="width: 60px;"></div>
+            <h1>图片转PDF工具</h1>
+            <button id="show-history-btn" class="history-btn">历史记录</button>
+        </div>
 
         <div class="button-wrapper">
-            <label for="file-input" class="upload-button" id="upload-label">选择图片</label>
+            <label for="file-input" class="upload-button" id="upload-label">选择图片或PDF</label>
             <button id="clear-all-button" class="clear-all-button">清空所有</button>
         </div>
-        <input type="file" id="file-input" multiple>
+        <input type="file" id="file-input" multiple accept="image/*,application/pdf">
 
-        <h3>图片列表（长按拖拽可排序）</h3>
+        <div class="list-header-area">
+            <h3>图片列表</h3>
+            <button id="edit-toggle-btn" class="edit-toggle-btn">编辑</button>
+        </div>
         
         <div id="image-preview-container-wrapper">
             <div id="image-preview-container">
@@ -358,13 +421,31 @@
             <button id="preview-pdf-button" class="preview-button">预览 PDF</button>
             <button id="generate-pdf-button" class="generate-button" disabled>生成 PDF</button>
         </div>
+    </div>
 
+    <div id="bulk-toolbar" class="bulk-toolbar">
+        <button class="bulk-btn bulk-delete" id="bulk-delete-btn">删除</button>
+        <button class="bulk-btn" id="bulk-invert-btn">反选</button>
+        <button class="bulk-btn" id="bulk-copy-btn">复制</button>
+        <button class="bulk-btn" id="bulk-move-btn">移动</button>
+    </div>
+
+    <div id="history-dialog" class="modal-overlay">
+        <div class="modal-content">
+            <h3>生成历史</h3>
+            <div style="max-height: 300px; overflow-y: auto;">
+                <ul id="history-list" class="history-list"></ul>
+            </div>
+            <div class="modal-actions">
+                <button id="close-history" class="action-secondary" style="width: 100%;">关闭</button>
+            </div>
+        </div>
     </div>
 
     <div id="copy-dialog" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="copy-dialog-title">复制第 X 张图片</h3>
-            <p style="text-align: center; margin-bottom: 10px;">将复制的图片插入到：</p>
+            <h3 id="copy-dialog-title">操作选择</h3>
+            <p style="text-align: center; margin-bottom: 10px;">将选中的图片插入到：</p>
             <div class="position-selector">
                 <select id="position-select"></select>
                 <span>和 图片</span>
@@ -380,7 +461,7 @@
     
     <div id="delete-dialog" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="delete-dialog-message">确定要删除这张图片吗？</h3>
+            <h3 id="delete-dialog-message">确定要删除吗？</h3>
             <div class="modal-actions">
                 <button id="cancel-delete" class="action-secondary">取消</button>
                 <button id="confirm-delete" class="action-primary">确定删除</button>
@@ -415,11 +496,10 @@
     <div id="status-bar">正在保存...</div>
 
     <script>
-        localforage.config({
-            name: 'PDFConverterApp',
-            storeName: 'images_db' 
-        });
+        localforage.config({ name: 'PDFConverterApp', storeName: 'images_db' });
 
+        // DOM 元素引用
+        const mainContainer = document.getElementById('main-container');
         const fileInput = document.getElementById('file-input');
         const previewContainer = document.getElementById('image-preview-container');
         const generateButton = document.getElementById('generate-pdf-button');
@@ -429,6 +509,19 @@
         const clearAllButton = document.getElementById('clear-all-button');
         const statusBar = document.getElementById('status-bar');
         
+        const showHistoryBtn = document.getElementById('show-history-btn');
+        const historyDialog = document.getElementById('history-dialog');
+        const historyList = document.getElementById('history-list');
+        const closeHistoryBtn = document.getElementById('close-history');
+
+        // 编辑模式相关
+        const editToggleBtn = document.getElementById('edit-toggle-btn');
+        const bulkToolbar = document.getElementById('bulk-toolbar');
+        const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+        const bulkInvertBtn = document.getElementById('bulk-invert-btn');
+        const bulkCopyBtn = document.getElementById('bulk-copy-btn');
+        const bulkMoveBtn = document.getElementById('bulk-move-btn');
+
         // Modal Elements
         const copyDialog = document.getElementById('copy-dialog');
         const dialogTitle = document.getElementById('copy-dialog-title');
@@ -454,30 +547,32 @@
         const imageViewer = document.getElementById('image-viewer');
         const imageViewerImg = document.getElementById('image-viewer-img');
 
+        // 状态变量
         let imageData = [];
-        let imageIndexToCopy = -1; 
-        let resolveNamePromise; 
         let isSaving = false;
+        let resolveNamePromise; 
         let currentDeleteAction = null; 
+        
+        // 编辑模式状态
+        let isEditMode = false;
+        let selectedIndices = new Set(); 
+        
+        // 复制/移动操作状态
+        let bulkActionType = null; 
+        let singleCopyIndex = -1;  
 
+        // 辅助函数
         function showStatus(msg, duration = 2000) {
             statusBar.textContent = msg;
             statusBar.style.display = 'block';
-            if (duration > 0) {
-                setTimeout(() => {
-                    statusBar.style.display = 'none';
-                }, duration);
-            }
+            if (duration > 0) setTimeout(() => { statusBar.style.display = 'none'; }, duration);
         }
 
         function showCustomAlert(message) {
             alertMessage.textContent = message;
             alertDialog.classList.add('visible');
             return new Promise(resolve => {
-                alertOkBtn.onclick = () => {
-                    alertDialog.classList.remove('visible');
-                    resolve();
-                };
+                alertOkBtn.onclick = () => { alertDialog.classList.remove('visible'); resolve(); };
             });
         }
         
@@ -485,198 +580,108 @@
             deleteDialogMessage.textContent = message;
             currentDeleteAction = confirmCallback;
             if (isDanger) {
-                confirmDeleteBtn.classList.remove('action-primary');
-                confirmDeleteBtn.classList.add('action-danger');
-                confirmDeleteBtn.textContent = "确认清空";
+                confirmDeleteBtn.classList.remove('action-primary'); confirmDeleteBtn.classList.add('action-danger');
+                confirmDeleteBtn.textContent = "确认执行";
             } else {
-                confirmDeleteBtn.classList.remove('action-danger');
-                confirmDeleteBtn.classList.add('action-primary');
-                confirmDeleteBtn.textContent = "确定删除";
+                confirmDeleteBtn.classList.remove('action-danger'); confirmDeleteBtn.classList.add('action-primary');
+                confirmDeleteBtn.textContent = "确定";
             }
             deleteDialog.classList.add('visible');
         }
 
         function showNamePrompt() {
-            pdfNameInput.value = "我的图片合集";
+            const date = new Date();
+            const dateStr = `${date.getMonth()+1}月${date.getDate()}日_${date.getHours()}点${date.getMinutes()}分`;
+            pdfNameInput.value = `PDF_${dateStr}`;
             nameDialog.classList.add('visible');
-            return new Promise(resolve => {
-                resolveNamePromise = resolve;
-            });
+            return new Promise(resolve => { resolveNamePromise = resolve; });
         }
 
-        // --- 数据加载 ---
-        async function loadImagesFromStorage() {
-            try {
-                placeholderText.textContent = "正在恢复上次的编辑...";
-                const loadedData = await localforage.getItem('pdfConverterImages');
-                if (Array.isArray(loadedData) && loadedData.length > 0) {
-                    imageData = loadedData;
-                    renderImages();
-                    showStatus("已恢复历史记录");
-                } else {
-                    imageData = [];
-                    renderImages();
-                }
-            } catch (e) {
-                console.error("加载数据失败", e);
-                imageData = [];
-                renderImages();
-                showStatus("无法读取历史数据", 3000);
-            }
-        }
-
-        async function saveImagesToStorage() {
-            if (isSaving) return;
-            isSaving = true;
-            try {
-                if (imageData.length > 0) {
-                    await localforage.setItem('pdfConverterImages', imageData);
-                } else {
-                    await localforage.removeItem('pdfConverterImages');
-                }
-            } catch (e) {
-                console.error("保存失败", e);
-                showStatus("存储空间不足，刷新可能丢失数据！", 5000);
-            } finally {
-                isSaving = false;
-                updatePlaceholderAndButton();
-            }
-        }
-
-        // --- 核心交互逻辑 ---
-        clearAllButton.onclick = () => {
-            showConfirmDialog(
-                "确定要清空所有图片吗？此操作无法撤销。",
-                async () => {
-                    imageData = [];
-                    renderImages();
-                    await localforage.clear();
-                    showStatus("列表已清空");
-                },
-                true
-            );
+        // --- 编辑模式逻辑 ---
+        editToggleBtn.onclick = () => {
+            isEditMode = !isEditMode;
+            toggleEditModeUI();
         };
 
-        fileInput.addEventListener('change', async (event) => {
-            const files = event.target.files;
-            if (files.length === 0) return;
+        function toggleEditModeUI() {
+            if (isEditMode) {
+                mainContainer.classList.add('edit-mode');
+                editToggleBtn.textContent = "完成";
+                editToggleBtn.classList.add('active');
+                bulkToolbar.classList.add('visible');
+                // 编辑模式禁用拖拽
+                if (previewContainer.sortable) previewContainer.sortable.option("disabled", true);
+            } else {
+                mainContainer.classList.remove('edit-mode');
+                editToggleBtn.textContent = "编辑";
+                editToggleBtn.classList.remove('active');
+                bulkToolbar.classList.remove('visible');
+                selectedIndices.clear(); 
+                // 启用拖拽
+                if (previewContainer.sortable) previewContainer.sortable.option("disabled", false);
+            }
+            renderImages(); 
+        }
 
-            uploadLabel.classList.add('disabled');
-            uploadLabel.textContent = "读取中...";
-            showStatus("正在处理图片...", 0);
+        function toggleSelection(index) {
+            if (selectedIndices.has(index)) {
+                selectedIndices.delete(index);
+            } else {
+                selectedIndices.add(index);
+            }
+            renderImages(); 
+        }
 
-            const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-            fileInput.value = '';
-
-            const readPromises = imageFiles.map(file => {
-                return new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => resolve(e.target.result);
-                    reader.onerror = () => resolve(null);
-                    reader.readAsDataURL(file);
+        // --- 批量操作逻辑 ---
+        
+        // 批量删除
+        bulkDeleteBtn.onclick = () => {
+            if (selectedIndices.size === 0) return showCustomAlert("请先选择图片");
+            showConfirmDialog(`确定删除选中的 ${selectedIndices.size} 张图片吗？`, async () => {
+                const indices = Array.from(selectedIndices).sort((a, b) => b - a);
+                indices.forEach(idx => {
+                    imageData.splice(idx, 1);
                 });
-            });
+                selectedIndices.clear();
+                if (imageData.length === 0) {
+                    isEditMode = false;
+                    toggleEditModeUI();
+                }
+                renderImages();
+                await saveImagesToStorage();
+                showStatus("删除完成");
+            }, true);
+        };
 
-            const newImagesData = await Promise.all(readPromises);
-            const successfulImages = newImagesData.filter(data => data !== null);
-            
-            imageData = imageData.concat(successfulImages);
-            renderImages();
-            await saveImagesToStorage();
-            
-            uploadLabel.classList.remove('disabled');
-            uploadLabel.textContent = "选择图片";
-            showStatus("图片添加成功");
-        });
-
-        function renderImages() {
-            previewContainer.innerHTML = ''; 
-            if (imageData.length === 0) {
-                placeholderText.textContent = "请点击上方按钮选择图片。";
-                previewContainer.appendChild(placeholderText);
-                updatePlaceholderAndButton();
-                return;
+        // 反选
+        bulkInvertBtn.onclick = () => {
+            const newSelection = new Set();
+            for (let i = 0; i < imageData.length; i++) {
+                if (!selectedIndices.has(i)) newSelection.add(i);
             }
-
-            imageData.forEach((base64Data, index) => {
-                const item = document.createElement('div');
-                item.className = 'image-item';
-
-                const numberSpan = document.createElement('span');
-                numberSpan.className = 'item-number'; 
-                numberSpan.textContent = index + 1;
-
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'image-content';
-
-                const img = document.createElement('img');
-                img.src = base64Data;
-                img.alt = `图片 ${index + 1}`;
-                img.onclick = () => showImageViewer(base64Data);
-                contentDiv.appendChild(img);
-
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'image-actions';
-
-                const copyBtn = document.createElement('button');
-                copyBtn.className = 'action-button copy-button';
-                copyBtn.innerHTML = '复制';
-                copyBtn.onclick = () => showCopyDialog(index); 
-
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'action-button remove-button';
-                removeBtn.innerHTML = '删除';
-                removeBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    showConfirmDialog(
-                        `确定要删除第 ${index + 1} 张图片吗？`, 
-                        async () => {
-                            imageData.splice(index, 1);
-                            renderImages(); 
-                            await saveImagesToStorage();
-                            showStatus(`图片 ${index + 1} 已删除`);
-                        },
-                        false
-                    );
-                };
-                
-                actionsDiv.appendChild(copyBtn);
-                actionsDiv.appendChild(removeBtn);
-                item.appendChild(numberSpan);
-                item.appendChild(contentDiv);
-                item.appendChild(actionsDiv);
-                previewContainer.appendChild(item);
-            });
-            
-            initSortable(); 
-            updatePlaceholderAndButton();
-        }
-
-        function showImageViewer(base64Data) {
-            imageViewerImg.src = base64Data;
-            imageViewer.classList.add('visible');
-        }
-        imageViewer.onclick = () => {
-            imageViewer.classList.remove('visible');
-            imageViewerImg.src = '';
+            selectedIndices = newSelection;
+            renderImages();
         };
 
-        // --- Dialog Logic ---
-        confirmDeleteBtn.onclick = () => {
-            if (currentDeleteAction) currentDeleteAction();
-            deleteDialog.classList.remove('visible');
-            currentDeleteAction = null;
+        // 批量复制
+        bulkCopyBtn.onclick = () => {
+            if (selectedIndices.size === 0) return showCustomAlert("请先选择图片");
+            bulkActionType = 'copy-bulk';
+            showPositionDialog(`复制选中的 ${selectedIndices.size} 张图片`);
         };
 
-        cancelDeleteBtn.onclick = () => {
-            deleteDialog.classList.remove('visible');
-            currentDeleteAction = null;
+        // 批量移动
+        bulkMoveBtn.onclick = () => {
+            if (selectedIndices.size === 0) return showCustomAlert("请先选择图片");
+            bulkActionType = 'move-bulk';
+            showPositionDialog(`移动选中的 ${selectedIndices.size} 张图片`);
         };
 
-        function showCopyDialog(originalIndex) {
-            imageIndexToCopy = originalIndex;
+
+        // --- 通用位置选择弹窗逻辑 ---
+        function showPositionDialog(titleText, defaultIndex = -1) {
+            dialogTitle.textContent = titleText;
             const totalCount = imageData.length;
-            dialogTitle.textContent = `复制第 ${originalIndex + 1} 张图片`;
             positionSelect.innerHTML = '';
             
             for (let i = 1; i <= totalCount + 1; i++) {
@@ -686,9 +691,10 @@
                 else if (i === totalCount + 1) option.textContent = totalCount.toString();
                 else option.textContent = i - 1;
                 
-                if (i === originalIndex + 1) option.selected = true;
+                if (defaultIndex !== -1 && i === defaultIndex + 1) option.selected = true;
                 positionSelect.appendChild(option);
             }
+            
             updateNextPositionDisplay(); 
             positionSelect.onchange = updateNextPositionDisplay;
             copyDialog.classList.add('visible');
@@ -701,191 +707,354 @@
             else if (selectedPosition === 1) nextPositionDisplay.textContent = '1';
             else nextPositionDisplay.textContent = selectedPosition;
         }
-        
-        confirmCopyBtn.onclick = async () => {
-            const originalIndex = imageIndexToCopy;
-            const selectedPosition = parseInt(positionSelect.value); 
-            const targetIndex = selectedPosition - 1; 
 
-            const dataToCopy = imageData[originalIndex];
-            imageData.splice(targetIndex, 0, dataToCopy);
+        // 确认复制/移动
+        confirmCopyBtn.onclick = async () => {
+            const selectedPos = parseInt(positionSelect.value); 
+            const targetIndex = selectedPos - 1; 
+
+            if (bulkActionType === 'copy-single') {
+                const dataToCopy = imageData[singleCopyIndex];
+                imageData.splice(targetIndex, 0, dataToCopy);
+                showStatus(`已复制到位置 ${selectedPos}`);
+            } 
+            else if (bulkActionType === 'copy-bulk') {
+                const indices = Array.from(selectedIndices).sort((a, b) => a - b);
+                const itemsToCopy = indices.map(i => imageData[i]);
+                imageData.splice(targetIndex, 0, ...itemsToCopy);
+                showStatus(`已批量复制`);
+                isEditMode = false; toggleEditModeUI();
+            }
+            else if (bulkActionType === 'move-bulk') {
+                const indices = Array.from(selectedIndices).sort((a, b) => a - b);
+                const itemsToMove = indices.map(i => imageData[i]);
+                const remainingData = imageData.filter((_, idx) => !selectedIndices.has(idx));
+                let adjustedTargetIndex = targetIndex;
+                const deletedCountBeforeTarget = indices.filter(idx => idx < targetIndex).length;
+                adjustedTargetIndex -= deletedCountBeforeTarget;
+                if (adjustedTargetIndex < 0) adjustedTargetIndex = 0;
+                if (adjustedTargetIndex > remainingData.length) adjustedTargetIndex = remainingData.length;
+                remainingData.splice(adjustedTargetIndex, 0, ...itemsToMove);
+                imageData = remainingData;
+                showStatus(`已批量移动`);
+                isEditMode = false; toggleEditModeUI();
+            }
 
             copyDialog.classList.remove('visible');
             renderImages();
             await saveImagesToStorage();
-            showStatus(`已复制到位置 ${selectedPosition}`);
-            imageIndexToCopy = -1; 
+            
+            bulkActionType = null;
+            singleCopyIndex = -1;
         };
+        
+        cancelCopyBtn.onclick = () => { copyDialog.classList.remove('visible'); };
 
-        cancelCopyBtn.onclick = () => {
-            copyDialog.classList.remove('visible');
-            imageIndexToCopy = -1;
-        };
 
-        function updatePlaceholderAndButton() {
-             if (imageData.length === 0) {
-                if (placeholderText.textContent !== "正在检查历史记录..." && placeholderText.textContent !== "正在恢复上次的编辑...") {
-                     placeholderText.style.display = 'block';
+        // --- 数据加载 & 保存 ---
+        async function loadImagesFromStorage() {
+            try {
+                placeholderText.textContent = "正在恢复上次的编辑...";
+                const loadedData = await localforage.getItem('pdfConverterImages');
+                if (Array.isArray(loadedData) && loadedData.length > 0) {
+                    imageData = loadedData;
+                    renderImages();
+                    showStatus("已恢复上次的草稿");
+                } else {
+                    imageData = [];
+                    renderImages();
                 }
-                generateButton.disabled = true;
-                clearAllButton.style.display = 'none';
-                previewButton.style.display = 'none';
-            } else {
-                placeholderText.style.display = 'none';
-                generateButton.disabled = false;
-                clearAllButton.style.display = 'inline-block';
-                previewButton.style.display = 'block';
+            } catch (e) {
+                console.error("加载数据失败", e);
+                imageData = [];
+                renderImages();
             }
         }
 
-        function initSortable() {
-            if (previewContainer.sortable) {
-                previewContainer.sortable.destroy();
-            }
-            previewContainer.sortable = Sortable.create(previewContainer, {
-                animation: 150, 
-                ghostClass: 'sortable-ghost',
-                handle: ".image-item", 
-                filter: ".action-button", 
-                onFilter: function (evt) {
-                    if (evt.item.contains(evt.originalEvent.target)) {
-                        evt.originalEvent.target.click(); 
+        async function saveImagesToStorage() {
+            if (isSaving) return;
+            isSaving = true;
+            try {
+                if (imageData.length > 0) await localforage.setItem('pdfConverterImages', imageData);
+                else await localforage.removeItem('pdfConverterImages');
+            } catch (e) { showStatus("存储空间不足！", 3000); } 
+            finally { isSaving = false; updatePlaceholderAndButton(); }
+        }
+
+        // --- 历史记录 ---
+        async function saveToHistory(name) {
+            try {
+                let history = await localforage.getItem('pdfHistory') || [];
+                if (history.length >= 10) history.pop();
+                const record = { id: Date.now(), name: name, date: new Date().toLocaleString(), images: [...imageData] };
+                history.unshift(record);
+                await localforage.setItem('pdfHistory', history);
+            } catch (e) { console.error(e); }
+        }
+
+        async function renderHistoryList() {
+            const history = await localforage.getItem('pdfHistory') || [];
+            historyList.innerHTML = '';
+            if (history.length === 0) { historyList.innerHTML = '<li class="empty-history">暂无历史记录</li>'; return; }
+            history.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = 'history-item';
+                li.innerHTML = `
+                    <div class="history-info"><span class="history-name">${item.name}</span><span class="history-time">${item.date} (${item.images.length}张)</span></div>
+                    <div class="history-actions">
+                        <button class="history-btn-small restore-btn">恢复</button>
+                        <button class="history-btn-small rename-btn">重命名</button>
+                        <button class="history-btn-small delete-btn">删除</button>
+                    </div>`;
+                li.querySelector('.restore-btn').onclick = () => {
+                    showConfirmDialog("恢复将覆盖当前编辑区，确定吗？", async () => {
+                        imageData = [...item.images]; 
+                        if(isEditMode) { isEditMode = false; toggleEditModeUI(); }
+                        renderImages(); await saveImagesToStorage();
+                        historyDialog.classList.remove('visible'); showStatus("已恢复");
+                    });
+                };
+                li.querySelector('.rename-btn').onclick = async () => {
+                    const newName = prompt("重命名：", item.name);
+                    if (newName && newName.trim() !== "") {
+                        history[index].name = newName.trim();
+                        await localforage.setItem('pdfHistory', history);
+                        renderHistoryList();
                     }
-                },
+                };
+                li.querySelector('.delete-btn').onclick = async () => {
+                    history.splice(index, 1);
+                    await localforage.setItem('pdfHistory', history);
+                    renderHistoryList(); 
+                };
+                historyList.appendChild(li);
+            });
+        }
+        showHistoryBtn.onclick = () => { renderHistoryList(); historyDialog.classList.add('visible'); };
+        closeHistoryBtn.onclick = () => { historyDialog.classList.remove('visible'); };
+
+        // --- 文件处理 ---
+        fileInput.addEventListener('change', async (event) => {
+            const files = event.target.files;
+            if (files.length === 0) return;
+            uploadLabel.classList.add('disabled'); uploadLabel.textContent = "处理中...";
+            const imageFiles = []; const pdfFiles = [];
+            Array.from(files).forEach(file => {
+                if (file.type === 'application/pdf') pdfFiles.push(file);
+                else if (file.type.startsWith('image/')) imageFiles.push(file);
+            });
+            fileInput.value = ''; 
+            showStatus(`准备处理 ${imageFiles.length + pdfFiles.length} 个文件...`, 0);
+
+            const imagePromises = imageFiles.map(file => new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(file);
+            }));
+            const newImagesData = await Promise.all(imagePromises);
+            imageData = imageData.concat(newImagesData.filter(d => d !== null));
+
+            if (pdfFiles.length > 0) {
+                showStatus("正在拆解 PDF...", 0);
+                for (const pdfFile of pdfFiles) {
+                    try {
+                        const pdfUrl = URL.createObjectURL(pdfFile);
+                        const loadingTask = pdfjsLib.getDocument(pdfUrl);
+                        const pdf = await loadingTask.promise;
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            showStatus(`PDF页: ${i}/${pdf.numPages}`, 0);
+                            const page = await pdf.getPage(i);
+                            const viewport = page.getViewport({ scale: 2.0 });
+                            const canvas = document.createElement('canvas');
+                            const context = canvas.getContext('2d');
+                            canvas.height = viewport.height; canvas.width = viewport.width;
+                            await page.render({ canvasContext: context, viewport: viewport }).promise;
+                            imageData.push(canvas.toDataURL('image/jpeg', 0.9));
+                        }
+                        URL.revokeObjectURL(pdfUrl);
+                    } catch (err) { await showCustomAlert(`文件 "${pdfFile.name}" 解析失败`); }
+                }
+            }
+            renderImages(); await saveImagesToStorage();
+            uploadLabel.classList.remove('disabled'); uploadLabel.textContent = "选择图片 or PDF"; showStatus("导入成功");
+        });
+
+        // --- 渲染 ---
+        clearAllButton.onclick = () => {
+            showConfirmDialog("确定清空所有图片吗？", async () => {
+                imageData = []; 
+                if(isEditMode) { isEditMode = false; toggleEditModeUI(); }
+                renderImages(); await localforage.removeItem('pdfConverterImages'); showStatus("已清空");
+            }, true);
+        };
+
+        function renderImages() {
+            previewContainer.innerHTML = ''; 
+            if (imageData.length === 0) {
+                placeholderText.textContent = "请点击上方按钮选择图片或 PDF 文件。";
+                previewContainer.appendChild(placeholderText);
+                updatePlaceholderAndButton();
+                return;
+            }
+
+            imageData.forEach((base64Data, index) => {
+                const item = document.createElement('div');
+                item.className = 'image-item';
+                if (selectedIndices.has(index)) item.classList.add('selected');
+
+                // 选择指示器 (CheckBox)
+                const indicator = document.createElement('div');
+                indicator.className = 'select-indicator';
+                item.appendChild(indicator);
+
+                const numberSpan = document.createElement('span');
+                numberSpan.className = 'item-number'; 
+                numberSpan.textContent = index + 1;
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'image-content';
+
+                const img = document.createElement('img');
+                img.src = base64Data;
+                img.alt = `图片 ${index + 1}`;
+                
+                if (isEditMode) {
+                    item.onclick = () => toggleSelection(index);
+                    img.onclick = (e) => { e.stopPropagation(); toggleSelection(index); }; 
+                } else {
+                    img.onclick = () => showImageViewer(base64Data);
+                    item.onclick = null; 
+                }
+                contentDiv.appendChild(img);
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'image-actions';
+
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'action-button copy-button';
+                copyBtn.innerHTML = '复制';
+                copyBtn.onclick = (e) => { e.stopPropagation(); singleCopyIndex = index; bulkActionType = 'copy-single'; showPositionDialog(`复制第 ${index + 1} 张图片`, index); }; 
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'action-button remove-button';
+                removeBtn.innerHTML = '删除';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    showConfirmDialog(`确定删除第 ${index + 1} 张图片吗？`, async () => {
+                        imageData.splice(index, 1); renderImages(); await saveImagesToStorage(); showStatus("已删除");
+                    });
+                };
+                
+                actionsDiv.appendChild(copyBtn);
+                actionsDiv.appendChild(removeBtn);
+
+                // --- 新增：三横线拖拽手柄 (SVG) ---
+                const handle = document.createElement('div');
+                handle.className = 'drag-handle';
+                // 使用 SVG 绘制三横线
+                handle.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>`;
+                item.appendChild(handle);
+
+                item.appendChild(numberSpan);
+                item.appendChild(contentDiv);
+                item.appendChild(actionsDiv);
+                item.appendChild(handle); // 放在最后，即最右侧
+
+                previewContainer.appendChild(item);
+            });
+            
+            initSortable(); 
+            updatePlaceholderAndButton();
+        }
+
+        function showImageViewer(base64Data) { imageViewerImg.src = base64Data; imageViewer.classList.add('visible'); }
+        imageViewer.onclick = () => { imageViewer.classList.remove('visible'); imageViewerImg.src = ''; };
+
+        // Dialog Confirm/Cancel
+        confirmDeleteBtn.onclick = () => { if (currentDeleteAction) currentDeleteAction(); deleteDialog.classList.remove('visible'); currentDeleteAction = null; };
+        cancelDeleteBtn.onclick = () => { deleteDialog.classList.remove('visible'); currentDeleteAction = null; };
+        confirmNameBtn.onclick = () => { const name = pdfNameInput.value.trim() || "未命名"; nameDialog.classList.remove('visible'); if (resolveNamePromise) resolveNamePromise(name); };
+        cancelNameBtn.onclick = () => { nameDialog.classList.remove('visible'); if (resolveNamePromise) resolveNamePromise(null); };
+
+        function updatePlaceholderAndButton() {
+             const hasData = imageData.length > 0;
+             placeholderText.style.display = hasData ? 'none' : 'block';
+             generateButton.disabled = !hasData;
+             clearAllButton.style.display = hasData ? 'inline-block' : 'none';
+             previewButton.style.display = hasData ? 'block' : 'none';
+             editToggleBtn.style.display = hasData ? 'block' : 'none';
+        }
+
+        function initSortable() {
+            if (previewContainer.sortable) previewContainer.sortable.destroy();
+            previewContainer.sortable = Sortable.create(previewContainer, {
+                handle: ".drag-handle", // 关键：指定拖拽句柄
+                animation: 150, 
+                // 关键优化：开启 forceFallback，使用 JS 模拟拖拽，解决手机端滚动卡顿问题
+                forceFallback: true, 
+                scrollSensitivity: 150, // 滚动触发灵敏度
+                scrollSpeed: 20, // 滚动速度
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                filter: ".action-button", 
+                disabled: isEditMode, // 编辑模式下禁用
+                onFilter: function (evt) { if (evt.item.contains(evt.originalEvent.target)) evt.originalEvent.target.click(); },
                 onEnd: async function (evt) {
-                    const oldIndex = evt.oldIndex;
-                    const newIndex = evt.newIndex;
-                    if (oldIndex !== newIndex) {
-                        const [movedItem] = imageData.splice(oldIndex, 1);
-                        imageData.splice(newIndex, 0, movedItem);
-                        renderImages();
-                        await saveImagesToStorage();
+                    if (evt.oldIndex !== evt.newIndex) {
+                        const [movedItem] = imageData.splice(evt.oldIndex, 1);
+                        imageData.splice(evt.newIndex, 0, movedItem);
+                        renderImages(); await saveImagesToStorage();
                     }
                 }
             });
         }
         
-        // --- 核心修复：更智能的 PDF 生成逻辑 ---
+        // PDF 生成
         async function createPDFDoc() {
             const { jsPDF } = window.jspdf;
-            
-            // 初始化，暂时不添加页面，避免 orientation 干扰
-            const doc = new jsPDF({
-                orientation: 'p', // 默认竖屏
-                unit: 'mm',
-                format: 'a4'
-            });
-
+            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
             for (let i = 0; i < imageData.length; i++) {
                 const imgData = imageData[i];
-                const img = new Image();
-                img.src = imgData;
-
-                await new Promise(resolve => {
-                    img.onload = resolve;
-                    img.onerror = () => {
-                        console.error(`图片加载失败: 索引 ${i}`);
-                        resolve();
-                    };
-                });
-                
-                // 固定宽度为 A4 宽度 (210mm)
+                const img = new Image(); img.src = imgData;
+                await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
                 const pdfWidth = 210;
-                
-                // 计算图片的宽高比
-                let imgWidth = img.naturalWidth;
-                let imgHeight = img.naturalHeight;
-                
-                if (!imgWidth || !imgHeight) {
-                     imgWidth = 100; imgHeight = 100; 
-                }
-                
-                const ratio = imgHeight / imgWidth;
-                const pdfHeight = pdfWidth * ratio;
-
-                // 【核心修复点】
-                // 显式判断页面的“方向”
-                // 如果图片宽度 > 高度（横图），我们告诉 PDF 这是一个 "landscape"（横向）页面
-                // 但同时传入的尺寸依然是 [210, 50]。
-                // 这样 jsPDF 就不会自作聪明地把 210 当成高度了。
+                let imgWidth = img.naturalWidth || 100; let imgHeight = img.naturalHeight || 100;
+                const ratio = imgHeight / imgWidth; const pdfHeight = pdfWidth * ratio;
                 const isWide = pdfWidth > pdfHeight;
-                const orientation = isWide ? 'l' : 'p';
-
-                doc.addPage([pdfWidth, pdfHeight], orientation);
+                doc.addPage([pdfWidth, pdfHeight], isWide ? 'l' : 'p');
                 doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
             }
-            
-            // 循环结束后，删除 PDF 初始化时自动生成的那个空白第一页
-            const totalPages = doc.getNumberOfPages();
-            if (totalPages > 1) {
-                doc.deletePage(1); 
-            }
-            
+            if (doc.getNumberOfPages() > 1) doc.deletePage(1); 
             return doc;
         }
 
-        // --- 预览功能 ---
         previewButton.addEventListener('click', async () => {
             if (imageData.length === 0) return;
-            showStatus("正在生成预览...", 0);
-            
+            showStatus("生成预览...", 0);
             setTimeout(async () => {
-                try {
-                    const doc = await createPDFDoc();
-                    // 在新窗口打开 Blob URL
-                    window.open(doc.output('bloburl'), '_blank');
-                    showStatus("预览已打开");
-                } catch (err) {
-                    console.error(err);
-                    showStatus("预览失败，请重试");
-                    await showCustomAlert("生成预览时出错。");
-                }
+                try { const doc = await createPDFDoc(); window.open(doc.output('bloburl'), '_blank'); showStatus("预览已打开"); } 
+                catch (err) { console.error(err); showStatus("预览失败"); }
             }, 100);
         });
 
-        // --- 生成功能 ---
         generateButton.addEventListener('click', async () => {
-            if (imageData.length === 0) {
-                await showCustomAlert('请先上传图片！');
-                return;
-            }
-
-            const pdfName = await new Promise(resolve => {
-                showNamePrompt();
-                resolveNamePromise = resolve;
-            });
-
+            if (imageData.length === 0) return showCustomAlert('请先上传文件！');
+            const pdfName = await new Promise(resolve => { showNamePrompt(); resolveNamePromise = resolve; });
             if (!pdfName) return; 
-            
-            showStatus("正在生成 PDF，请不要关闭页面...", 0);
-
+            showStatus("处理中...", 0);
+            await saveToHistory(pdfName);
             setTimeout(async () => {
                 try {
                     const doc = await createPDFDoc();
                     doc.save(`${pdfName}.pdf`);
                     statusBar.style.display = 'none';
-                    await showCustomAlert(`PDF 文件 "${pdfName}.pdf" 已生成并下载！`);
-                } catch (err) {
-                    console.error(err);
-                    showStatus("生成失败，请重试");
-                    await showCustomAlert("生成 PDF 时出错，请检查图片是否正常。");
-                }
+                    await showCustomAlert(`PDF 已生成！`);
+                } catch (err) { console.error(err); showStatus("生成失败"); }
             }, 100);
         });
 
-        confirmNameBtn.onclick = () => {
-            const name = pdfNameInput.value.trim() || "未命名文件";
-            nameDialog.classList.remove('visible');
-            if (resolveNamePromise) resolveNamePromise(name);
-        };
-
-        cancelNameBtn.onclick = () => {
-            nameDialog.classList.remove('visible');
-            if (resolveNamePromise) resolveNamePromise(null);
-        };
-
         window.onload = loadImagesFromStorage;
-
     </script>
 </body>
 </html>
