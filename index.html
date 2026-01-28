@@ -389,6 +389,37 @@
         #image-viewer-img { max-width: 95%; max-height: 95%; border-radius: 8px; pointer-events: none; }
         #pdf-name-input { width: 100%; padding: 10px; border: 1px solid #CCCCCC; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
         #status-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px; font-size: 14px; z-index: 4000; display: none; white-space: nowrap; }
+        /* 悬浮滚动导航样式 */
+        .scroll-nav {
+            position: fixed;
+            right: 20px;
+            bottom: 120px; /* 留出空间防止遮挡底部栏 */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1500;
+        }
+        .scroll-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #333;
+            border: 1px solid #ddd;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .scroll-btn:hover { background-color: #1A1A1A; color: white; border-color: #1A1A1A; }
+        /* 移动端适配：稍微缩小防止误触 */
+        @media (max-width: 600px) {
+            .scroll-nav { right: 15px; bottom: 100px; }
+            .scroll-btn { width: 40px; height: 40px; font-size: 16px; opacity: 0.8; }
+        }
     </style>
 </head>
 <body>
@@ -418,12 +449,17 @@
         </div>
 
         <div class="bottom-actions">
+            <button id="download-all-button" class="preview-button" style="background-color: #2D2D2D; margin-bottom: 10px;">下载全部原图</button>
             <button id="preview-pdf-button" class="preview-button">预览 PDF</button>
             <button id="generate-pdf-button" class="generate-button" disabled>生成 PDF</button>
+            <p style="text-align: center; color: #999; font-size: 10px; margin-top: 20px; margin-bottom: 0;">
+                其实还能把PDF拆成图片并按顺序原图下载哦快来试试吧(o^^o)♪
+            </p>
         </div>
     </div>
 
     <div id="bulk-toolbar" class="bulk-toolbar">
+        <button class="bulk-btn" id="bulk-download-btn" style="color: #1976D2; font-weight: bold;">下载</button>
         <button class="bulk-btn bulk-delete" id="bulk-delete-btn">删除</button>
         <button class="bulk-btn" id="bulk-invert-btn">反选</button>
         <button class="bulk-btn" id="bulk-copy-btn">复制</button>
@@ -984,7 +1020,12 @@
              clearAllButton.style.display = hasData ? 'inline-block' : 'none';
              previewButton.style.display = hasData ? 'block' : 'none';
              editToggleBtn.style.display = hasData ? 'block' : 'none';
+             
+             // 新增：控制下载按钮显示
+             const dlBtn = document.getElementById('download-all-button');
+             if(dlBtn) dlBtn.style.display = hasData ? 'block' : 'none';
         }
+
 
         function initSortable() {
             if (previewContainer.sortable) previewContainer.sortable.destroy();
@@ -1053,8 +1094,77 @@
                 } catch (err) { console.error(err); showStatus("生成失败"); }
             }, 100);
         });
+        
+        // --- 新增下载功能逻辑 ---
+        const downloadAllBtn = document.getElementById('download-all-button');
+        const bulkDownloadBtn = document.getElementById('bulk-download-btn');
 
-        window.onload = loadImagesFromStorage;
+        async function downloadImagesSequence(indices) {
+            if (indices.length === 0) return;
+            showStatus(`准备下载 ${indices.length} 张图片...`, 0);
+            indices.sort((a, b) => a - b); // 确保按顺序
+
+            for (let i = 0; i < indices.length; i++) {
+                const index = indices[i];
+                const base64Data = imageData[index];
+                
+                // 智能识别后缀
+                let ext = 'png';
+                try {
+                    const mime = base64Data.match(/data:([^;]+);/)[1];
+                    if (mime.includes('jpeg')) ext = 'jpg';
+                    else ext = mime.split('/')[1];
+                } catch (e) {}
+
+                const link = document.createElement('a');
+                link.href = base64Data; // 直接使用Base64，确保原图画质无损
+                link.download = `Image_${String(index + 1).padStart(3, '0')}.${ext}`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                showStatus(`正在下载: ${i + 1} / ${indices.length}`);
+                await new Promise(resolve => setTimeout(resolve, 600)); 
+
+            }
+            showStatus("下载完成");
+        }
+
+        if(downloadAllBtn) {
+            downloadAllBtn.addEventListener('click', () => {
+                if (imageData.length === 0) return showCustomAlert('列表为空');
+                showConfirmDialog(`确定下载全部 ${imageData.length} 张原图吗？`, () => {
+                    downloadImagesSequence(imageData.map((_, i) => i));
+                });
+            });
+        }
+
+        if(bulkDownloadBtn) {
+            bulkDownloadBtn.addEventListener('click', () => {
+                if (selectedIndices.size === 0) return showCustomAlert("请先选择图片");
+                downloadImagesSequence(Array.from(selectedIndices));
+            });
+        }
+   
+        // --- 滚动按钮逻辑 (修改版) ---
+        // 使用 window.onload 确保按钮元素加载完毕后再绑定事件
+        window.onload = function() {
+            // 1. 先执行原本的数据加载
+            loadImagesFromStorage();
+
+            // 2. 绑定滚动按钮事件
+            const topBtn = document.getElementById('scroll-to-top');
+            const botBtn = document.getElementById('scroll-to-bottom');
+
+            if (topBtn) topBtn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (botBtn) botBtn.onclick = () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        };
+       
+
     </script>
+    <div class="scroll-nav">
+        <button id="scroll-to-top" class="scroll-btn" title="回到顶部">▲</button>
+        <button id="scroll-to-bottom" class="scroll-btn" title="去到底部">▼</button>
+    </div>
 </body>
 </html>
