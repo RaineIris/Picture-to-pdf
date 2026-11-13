@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>图片转PDF工具</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -421,6 +421,112 @@
             .scroll-nav { right: 15px; bottom: 100px; }
             .scroll-btn { width: 40px; height: 40px; font-size: 16px; opacity: 0.8; }
         }
+    
+        /* Responsive editorial refresh — preserve existing tools and behavior */
+        *,*::before,*::after{box-sizing:border-box}
+        :root{--ui-ink:#202329;--ui-muted:#737983;--ui-line:#E5E7EB;--ui-surface:#FFFFFF;--ui-soft:#F6F7F9}
+        body{background:#F4F5F7;color:var(--ui-ink);padding-bottom:calc(85px + env(safe-area-inset-bottom));line-height:1.5}
+        .container{
+          width:min(100% - 40px,1000px);max-width:1000px;
+          margin:28px auto 50px;padding:clamp(20px,3.8vw,42px);
+          min-height:calc(100vh - 78px);border:1px solid #E8EAEE;
+          border-radius:20px;background:#fff;
+          box-shadow:0 14px 45px rgba(25,32,44,.055),0 2px 8px rgba(25,32,44,.025);
+        }
+        .top-controls{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:center;padding:0;margin-bottom:30px}
+        .top-controls>div:first-child{width:auto!important}
+        .top-controls h1{font-size:clamp(23px,3.3vw,32px);font-weight:650;letter-spacing:-.035em;margin:0;white-space:nowrap}
+        .top-controls .history-btn{justify-self:end;white-space:nowrap;padding:7px 2px;font-size:14px}
+        .button-wrapper{justify-content:center;align-items:center;gap:12px;margin:0 0 29px}
+        .upload-button,.clear-all-button{
+          margin:0;min-height:48px;display:inline-flex;align-items:center;justify-content:center;
+          padding:12px 22px;border-radius:11px;font-weight:600;letter-spacing:.005em;
+          transition:background .18s,transform .18s,box-shadow .18s;
+        }
+        .upload-button{background:#22262D;box-shadow:0 4px 10px rgba(24,29,37,.12)}
+        .upload-button:hover{background:#373C45;box-shadow:0 7px 16px rgba(24,29,37,.16)}
+        .upload-button:active,.clear-all-button:active,.generate-button:active,.preview-button:active{transform:translateY(1px)}
+        .clear-all-button{background:#FFF1F1;color:#B42C36;border:1px solid #F7DADD}
+        .clear-all-button:hover{background:#FDE6E8}
+        .list-header-area{margin-bottom:12px;gap:10px}
+        .list-header-area h3{font-size:17px;font-weight:650;letter-spacing:-.015em}
+        .edit-toggle-btn{border-radius:9px;border:1px solid #D6DAE0;color:#39424D;background:#fff;padding:7px 14px;font-weight:550}
+        .edit-toggle-btn.active{background:#262B33;border-color:#262B33;color:#fff}
+        #image-preview-container{background:#FAFBFC;border:1px solid #E7E9ED;border-radius:14px;padding:10px 16px;min-height:110px}
+        #placeholder-text{text-align:center;color:#858B94;padding:25px 8px;line-height:1.7}
+        .image-item{gap:12px;padding:13px 4px;border-bottom:1px solid #ECEEF1;min-width:0}
+        .item-number{min-width:26px;padding:0;font-size:15px;color:#9197A0;font-variant-numeric:tabular-nums}
+        .image-content{min-width:0;gap:12px}
+        .image-content img{width:74px;height:74px;margin:0;border:1px solid #E5E7EB;border-radius:10px;background:#fff}
+        .image-actions{gap:7px;margin:0;align-items:center}
+        .action-button{min-height:36px;border:1px solid #E4E6EA;border-radius:9px;padding:7px 12px;background:#fff;color:#404650}
+        .action-button:hover{background:#F0F2F5}
+        .drag-handle{margin-left:0;padding:9px;border-radius:9px}
+        .drag-handle:hover{background:#F0F2F5}
+        .bottom-actions{margin-top:24px;display:flex;flex-direction:column;gap:10px}
+        .generate-button,.preview-button{min-height:50px;margin:0!important;border-radius:11px;font-weight:600;letter-spacing:.01em}
+        .generate-button{background:#22262D}
+        .preview-button{background:#3D4652}
+        .bottom-actions>p{margin-top:12px!important;line-height:1.6}
+        .modal-overlay{padding:18px;background:rgba(25,30,39,.56)}
+        .modal-content{width:min(100%,460px);max-width:460px;max-height:min(85dvh,740px);border-radius:18px;padding:clamp(20px,4vw,30px);box-shadow:0 25px 70px rgba(13,20,31,.25)}
+        .modal-content h3{font-size:20px;font-weight:650;letter-spacing:-.02em}
+        .modal-actions{gap:10px}
+        .modal-actions button{min-height:43px;border-radius:10px}
+        .bulk-toolbar{padding:10px max(12px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom));border-top:1px solid #E7E9EC;box-shadow:0 -8px 28px rgba(25,32,44,.08)}
+        .bulk-btn{min-height:44px;border-radius:9px}
+        .scroll-nav{right:max(20px,env(safe-area-inset-right));bottom:110px}
+        .scroll-btn{box-shadow:0 4px 14px rgba(23,28,36,.10);border-color:#E3E6EA}
+        button:focus-visible,.upload-button:focus-visible,select:focus-visible,input:focus-visible,.drag-handle:focus-visible{
+          outline:2px solid #5B718F!important;outline-offset:3px;
+        }
+        @media(min-width:700px){
+          .button-wrapper{justify-content:flex-start}
+          .bottom-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+          .bottom-actions #generate-pdf-button{grid-column:1/-1;order:3}
+          .bottom-actions>p{grid-column:1/-1;order:4}
+          .bottom-actions #download-all-button,.bottom-actions #preview-pdf-button{width:100%}
+        }
+        @media(min-width:1100px){
+          .container{margin-top:40px}
+          .image-item{padding:15px 8px}
+          .image-content img{width:84px;height:84px}
+        }
+        @media(max-width:699px){
+          .container{width:calc(100% - 24px);margin:12px auto 28px;padding:20px 16px;border-radius:16px;min-height:calc(100dvh - 24px)}
+          .top-controls{grid-template-columns:minmax(0,1fr) auto;gap:9px;margin-bottom:25px}
+          .top-controls>div:first-child{display:none}
+          .top-controls h1{text-align:left;font-size:clamp(21px,5.7vw,27px);white-space:normal}
+          .top-controls .history-btn{font-size:13px}
+          .button-wrapper{gap:9px;margin-bottom:24px}
+          .upload-button{flex:1;min-width:0;text-align:center;padding:12px 10px;font-size:14px}
+          .clear-all-button{padding:11px 12px;font-size:14px}
+          #image-preview-container{padding:8px 10px}
+          .image-item{gap:7px;flex-wrap:wrap;padding:11px 2px}
+          .item-number{min-width:20px;font-size:13px}
+          .image-content{flex:1 1 130px;gap:8px}
+          .image-content img{width:60px;height:60px;border-radius:8px}
+          .image-actions{gap:5px}
+          .action-button{padding:7px 8px;min-height:36px;font-size:12px}
+          .drag-handle{padding:7px}
+          .bottom-actions{gap:10px}
+          .scroll-nav{right:12px;bottom:95px}
+          .scroll-btn{width:42px;height:42px;opacity:.93}
+          .bulk-toolbar{gap:2px}
+          .bulk-btn{font-size:13px}
+        }
+        @media(max-width:380px){
+          .container{width:calc(100% - 16px);padding:16px 11px}
+          .top-controls h1{font-size:20px}
+          .image-item{column-gap:5px}
+          .image-content img{width:50px;height:50px}
+          .action-button{font-size:12px;padding:6px}
+          .drag-handle{padding:5px}
+        }
+        @media(prefers-reduced-motion:reduce){
+          .upload-button,.clear-all-button,.modal-overlay,.bulk-toolbar{transition:none}
+        }
+
     </style>
 </head>
 <body>
